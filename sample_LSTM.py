@@ -204,7 +204,8 @@ test_ids = np.array(test_ids)
 
 
 #
-# Prepare embeddings
+# Prepare embeddings: construct a matrix  for mapping (word_id ==> word_vec)
+# The embedding matrix with (number_of_words, embedding_dimension)
 # ----------------------------------------------------------------------------
 print('Preparing embedding matrix')
 
@@ -223,20 +224,20 @@ print('Null word embeddings: %d' % np.sum(np.sum(embedding_matrix, axis=1) == 0)
 # np.random.seed(1234)
 perm = np.random.permutation(len(data_1))
 idx_train = perm[:int(len(data_1) * (1 - VALIDATION_SPLIT))]
-idx_val = perm[int(len(data_1) * (1 - VALIDATION_SPLIT)):]
+idx_valid = perm[int(len(data_1) * (1 - VALIDATION_SPLIT)):]
 
 data_1_train = np.vstack((data_1[idx_train], data_2[idx_train]))
 data_2_train = np.vstack((data_2[idx_train], data_1[idx_train]))
 labels_train = np.concatenate((labels[idx_train], labels[idx_train]))
 
-data_1_val = np.vstack((data_1[idx_val], data_2[idx_val]))
-data_2_val = np.vstack((data_2[idx_val], data_1[idx_val]))
-labels_val = np.concatenate((labels[idx_val], labels[idx_val]))
+data_1_valid = np.vstack((data_1[idx_valid], data_2[idx_valid]))
+data_2_valid = np.vstack((data_2[idx_valid], data_1[idx_valid]))
+labels_valid = np.concatenate((labels[idx_valid], labels[idx_valid]))
 
-weight_val = np.ones(len(labels_val))
+weight_val = np.ones(len(labels_valid))
 if re_weight:
     weight_val *= 0.472001959
-    weight_val[labels_val == 0] = 1.309028344
+    weight_val[labels_valid == 0] = 1.309028344
 
 
 #
@@ -249,6 +250,7 @@ embedding_layer = Embedding(nb_words,
                             trainable=False)
 lstm_layer = LSTM(num_lstm, dropout=rate_drop_lstm, recurrent_dropout=rate_drop_lstm)
 
+
 sequence_1_input = Input(shape=(MAX_SEQUENCE_LENGTH,), dtype='int32')
 embedded_sequences_1 = embedding_layer(sequence_1_input)
 x1 = lstm_layer(embedded_sequences_1)
@@ -259,12 +261,12 @@ y1 = lstm_layer(embedded_sequences_2)
 
 merged = concatenate([x1, y1])
 merged = Dropout(rate_drop_dense)(merged)
-merged = BatchNormalization()(merged)
 
+merged = BatchNormalization()(merged)
 merged = Dense(num_dense, activation=act)(merged)
 merged = Dropout(rate_drop_dense)(merged)
-merged = BatchNormalization()(merged)
 
+merged = BatchNormalization()(merged)
 preds = Dense(1, activation='sigmoid')(merged)
 
 
@@ -279,7 +281,7 @@ else:
 #
 # Train the model
 # ----------------------------------------------------------------------------
-model = Model(inputs=[sequence_1_input, sequence_2_input], \
+model = Model(inputs=[sequence_1_input, sequence_2_input],
               outputs=preds)
 model.compile(loss='binary_crossentropy',
               optimizer='nadam',
@@ -291,9 +293,10 @@ early_stopping = EarlyStopping(monitor='val_loss', patience=3)
 bst_model_path = STAMP + '.h5'
 model_checkpoint = ModelCheckpoint(bst_model_path, save_best_only=True, save_weights_only=True)
 
-hist = model.fit([data_1_train, data_2_train], labels_train, \
-                 validation_data=([data_1_val, data_2_val], labels_val, weight_val), \
-                 epochs=200, batch_size=2048, shuffle=True, \
+hist = model.fit([data_1_train, data_2_train],
+                 labels_train,
+                 validation_data=([data_1_valid, data_2_valid], labels_valid, weight_val),
+                 epochs=200, batch_size=2048, shuffle=True,
                  class_weight=class_weight, callbacks=[early_stopping, model_checkpoint])
 
 model.load_weights(bst_model_path)
