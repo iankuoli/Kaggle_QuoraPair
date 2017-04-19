@@ -47,7 +47,8 @@ test_CVID = 0
 BASE_DIR = '../input/'
 EMBEDDING_FILE = '/home/ian/workspace/resources/GoogleNews-vectors-negative300.bin'
 TRAIN_DATA_FILE = '/home/ian/Dataset/QuoraQP/CV-' + str(test_CVID) + '_clean.csv'
-TEST_DATA_FILE = '/home/ian/Dataset/QuoraQP/CV' + str(test_CVID) + '_clean.csv'
+VALID_DATA_FILE = '/home/ian/Dataset/QuoraQP/CV' + str(test_CVID) + '_clean.csv'
+TEST_DATA_FILE = '/home/ian/Dataset/QuoraQP/test_clean.csv'
 MAX_SEQUENCE_LENGTH = 30
 MAX_NB_WORDS = 200000
 EMBEDDING_DIM = 300
@@ -144,6 +145,21 @@ def text_to_wordlist(text, remove_stopwords=False, stem_words=False):
 
 
 #
+# Read Training & Validation data
+# ----------------------------------------------------------------------------
+# texts_1 = []
+# texts_2 = []
+# labels = []
+# with codecs.open(TRAIN_DATA_FILE, encoding='utf-8') as f:
+#     reader = csv.reader(f, delimiter=',')
+#     header = next(reader)
+#     for values in reader:
+#         texts_1.append(text_to_wordlist(values[3]))
+#         texts_2.append(text_to_wordlist(values[4]))
+#         labels.append(int(values[5]))
+# print('Found %s texts in train.csv' % len(texts_1))
+
+#
 # Read Training data
 # ----------------------------------------------------------------------------
 train_texts_1 = []
@@ -158,6 +174,20 @@ with codecs.open(TRAIN_DATA_FILE, encoding='utf-8') as f:
         train_labels.append(int(values[5]))
 print('Found %s texts in train.csv' % len(train_texts_1))
 
+#
+# Read Validation data
+# ----------------------------------------------------------------------------
+valid_texts_1 = []
+valid_texts_2 = []
+valid_labels = []
+with codecs.open(VALID_DATA_FILE, encoding='utf-8') as f:
+    reader = csv.reader(f, delimiter=',')
+    header = next(reader)
+    for values in reader:
+        valid_texts_1.append(text_to_wordlist(values[3]))
+        valid_texts_2.append(text_to_wordlist(values[4]))
+        valid_labels.append(int(values[5]))
+print('Found %s texts in validation.csv' % len(valid_texts_1))
 
 #
 # Read Testing data
@@ -182,25 +212,45 @@ print('Found %s texts in test.csv' % len(test_texts_1))
 #     word_index = {'i':1, 'am':2, 'pig':3, 'you':4, 'are':5, 'queen':6}
 # ----------------------------------------------------------------------------
 tokenizer = Tokenizer(num_words=MAX_NB_WORDS)
-tokenizer.fit_on_texts(train_texts_1 + train_texts_2 + test_texts_1 + test_texts_2)
+# tokenizer.fit_on_texts(texts_1 + texts_2 + test_texts_1 + test_texts_2 + valid_texts_1 + valid_texts_2)
+tokenizer.fit_on_texts(train_texts_1 + train_texts_2 + valid_texts_1 + valid_texts_2 + test_texts_1 + test_texts_2)
 
-sequences_1 = tokenizer.texts_to_sequences(train_texts_1)
-sequences_2 = tokenizer.texts_to_sequences(train_texts_2)
+# Tokenize training & validation data
+# sequences_1 = tokenizer.texts_to_sequences(texts_1)
+# sequences_2 = tokenizer.texts_to_sequences(texts_2)
+# data_1 = pad_sequences(sequences_1, maxlen=MAX_SEQUENCE_LENGTH)
+# data_2 = pad_sequences(sequences_2, maxlen=MAX_SEQUENCE_LENGTH)
+# labels = np.array(labels)
+# print('Shape of data tensor:', data_1.shape)
+# print('Shape of label tensor:', labels.shape)
+
+# Tokenize training data
+train_sequences_1 = tokenizer.texts_to_sequences(train_texts_1)
+train_sequences_2 = tokenizer.texts_to_sequences(train_texts_2)
+train_data_1 = pad_sequences(train_sequences_1, maxlen=MAX_SEQUENCE_LENGTH)
+train_data_2 = pad_sequences(train_sequences_2, maxlen=MAX_SEQUENCE_LENGTH)
+train_labels = np.array(train_labels)
+print('Shape of data tensor:', train_data_1.shape)
+print('Shape of label tensor:', train_labels.shape)
+
+# Tokenize validation data
+valid_sequences_1 = tokenizer.texts_to_sequences(valid_texts_1)
+valid_sequences_2 = tokenizer.texts_to_sequences(valid_texts_2)
+valid_data_1 = pad_sequences(valid_sequences_1, maxlen=MAX_SEQUENCE_LENGTH)
+valid_data_2 = pad_sequences(valid_sequences_2, maxlen=MAX_SEQUENCE_LENGTH)
+valid_labels = np.array(valid_labels)
+print('Shape of data tensor:', valid_data_1.shape)
+print('Shape of label tensor:', valid_labels.shape)
+
+# Tokenize testing data
 test_sequences_1 = tokenizer.texts_to_sequences(test_texts_1)
 test_sequences_2 = tokenizer.texts_to_sequences(test_texts_2)
-
-word_index = tokenizer.word_index
-print('Found %s unique tokens' % len(word_index))
-
-data_1 = pad_sequences(sequences_1, maxlen=MAX_SEQUENCE_LENGTH)
-data_2 = pad_sequences(sequences_2, maxlen=MAX_SEQUENCE_LENGTH)
-labels = np.array(train_labels)
-print('Shape of data tensor:', data_1.shape)
-print('Shape of label tensor:', labels.shape)
-
 test_data_1 = pad_sequences(test_sequences_1, maxlen=MAX_SEQUENCE_LENGTH)
 test_data_2 = pad_sequences(test_sequences_2, maxlen=MAX_SEQUENCE_LENGTH)
 test_ids = np.array(test_ids)
+
+word_index = tokenizer.word_index
+print('Found %s unique tokens' % len(word_index))
 
 
 #
@@ -222,17 +272,30 @@ print('Null word embeddings: %d' % np.sum(np.sum(embedding_matrix, axis=1) == 0)
 # Sample train/validation data
 # ----------------------------------------------------------------------------
 # np.random.seed(1234)
-perm = np.random.permutation(len(data_1))
-idx_train = perm[:int(len(data_1) * (1 - VALIDATION_SPLIT))]
-idx_valid = perm[int(len(data_1) * (1 - VALIDATION_SPLIT)):]
+# perm = np.random.permutation(len(data_1))
+# idx_train = perm[:int(len(data_1) * (1 - VALIDATION_SPLIT))]
+# idx_valid = perm[int(len(data_1) * (1 - VALIDATION_SPLIT)):]
+#
+# data_1_train = np.vstack((data_1[idx_train], data_2[idx_train]))
+# data_2_train = np.vstack((data_2[idx_train], data_1[idx_train]))
+# labels_train = np.concatenate((labels[idx_train], labels[idx_train]))
+#
+# data_1_valid = np.vstack((data_1[idx_valid], data_2[idx_valid]))
+# data_2_valid = np.vstack((data_2[idx_valid], data_1[idx_valid]))
+# labels_valid = np.concatenate((labels[idx_valid], labels[idx_valid]))
 
-data_1_train = np.vstack((data_1[idx_train], data_2[idx_train]))
-data_2_train = np.vstack((data_2[idx_train], data_1[idx_train]))
-labels_train = np.concatenate((labels[idx_train], labels[idx_train]))
 
-data_1_valid = np.vstack((data_1[idx_valid], data_2[idx_valid]))
-data_2_valid = np.vstack((data_2[idx_valid], data_1[idx_valid]))
-labels_valid = np.concatenate((labels[idx_valid], labels[idx_valid]))
+#
+# Sample predefined train/validation data
+# ----------------------------------------------------------------------------
+data_1_train = np.vstack((train_data_1, train_data_2))
+data_2_train = np.vstack((train_data_2, train_data_1))
+labels_train = np.concatenate((train_labels, train_labels))
+
+data_1_valid = np.vstack((valid_data_1, valid_data_2))
+data_2_valid = np.vstack((valid_data_2, valid_data_1))
+labels_valid = np.concatenate((valid_labels, valid_labels))
+
 
 weight_val = np.ones(len(labels_valid))
 if re_weight:
