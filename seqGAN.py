@@ -15,11 +15,11 @@ TODO = "todo"
 
 
 @contextmanager
-def trainable(model, trainable):
+def trainable(model, bool_trainable):
     trainables = []
     for layer in model.layers:
         trainables.append(layer.trainable)
-        layer.trainable = trainable
+        layer.trainable = bool_trainable
     yield
     for t, layer in zip(trainables, model.layers):
         layer.trainable = t
@@ -51,8 +51,10 @@ class SeqGAN:
         self.z, self.seq_input = self.g.inputs
         self.fake_prob, = self.g.outputs
 
+        self.history = None
+
         with trainable(m, False):
-            #m_input = merge([self.seq_input, self.fake_prob], mode='concat', concat_axis=1)
+            # m_input = merge([self.seq_input, self.fake_prob], mode='concat', concat_axis=1)
             m_input = concatenate([self.seq_input, self.fake_prob], axis=1)
             self.m_realness = self.m(m_input)
             self.model_fit_g = Model(inputs=[self.z, self.seq_input],
@@ -64,14 +66,19 @@ class SeqGAN:
                        loss=K.binary_crossentropy)
 
     #
-    # return the shape of input noise variables z
+    # Return the shape of input noise variables z
+    # (batch_size: the number of data read per batch)
     # ----------------------------------------------------------------------------
     def z_shape(self, batch_size=64):
-        layer, _, _ = self.z._keras_history
-        return (batch_size,) + layer.output_shape[1:]
+        # layer, _, _ = self.z._keras_history
+        # _keras_history是一个tuple类型，第一个参数代表previous Layer； 第二个参数node_index; 第三个参数是tensor_index
+        # （ 因为可能有多个tensor output，如果是只有一个tensor output的话，tensor_index = 0）
+        layer, node_index, tensor_index = self.z._keras_history
+        return (batch_size,) + layer.output_shape[1:]  # the first dimension is data size
 
     #
-    # Sample input noise variables z
+    # Sample input noise variables z by uniform distributions
+    # (batch_size: the number of data read per batch)
     # ----------------------------------------------------------------------------
     def sample_z(self, batch_size=64):
         shape = self.z_shape(batch_size)
@@ -97,11 +104,13 @@ class SeqGAN:
         fake_prob = self.generate(self.sample_z(nb_fake), seq_input)
         fake = np.concatenate([seq_input, prob_to_sentence(fake_prob)], axis=1)
         fake_and_real = np.concatenate([fake, real], axis=0)
-        d_loss = self.d.train_on_batch(fake_and_real, d_target)
+        d_loss = self.d.train_on_batch(x=fake_and_real,
+                                       y=d_target)
         d_realness = self.d.predict(fake)
-        m_loss = self.m.train_on_batch(np.concatenate([seq_input, fake_prob], axis=1), d_realness)
-        g_loss = self.model_fit_g.train_on_batch([self.sample_z(nb_fake), seq_input],
-                                                 np.ones((nb_fake, 1)))
+        m_loss = self.m.train_on_batch(x=np.concatenate([seq_input, fake_prob], axis=1),
+                                       y=d_realness)
+        g_loss = self.model_fit_g.train_on_batch(x=[self.sample_z(nb_fake), seq_input],
+                                                 y=np.ones((nb_fake, 1)))
         return g_loss, d_loss, m_loss
 
     #
@@ -120,8 +129,8 @@ class SeqGAN:
         if verbose:
             callbacks += [cbks.ProgbarLogger()]
         callbacks = cbks.CallbackList(callbacks)
-        callbacks._set_model(self)
-        callbacks._set_params({
+        callbacks.set_model(self)
+        callbacks.set_params({
             'nb_epoch': nb_epoch,
             'nb_sample': nb_batches_per_epoch*batch_size,
             'verbose': verbose,
@@ -133,10 +142,9 @@ class SeqGAN:
             callbacks.on_epoch_begin(e)
             for batch_index, (seq_input, real) in enumerate(generator):
                 callbacks.on_batch_begin(batch_index)
-                batch_logs = {}
+                batch_logs = dict()
                 batch_logs['batch'] = batch_index
-                batch_logs['size'] = len(real) + len(seq_input
-                                                     )
+                batch_logs['size'] = len(real) + len(seq_input)
                 outs = self.train_on_batch(seq_input, real)
 
                 for l, o in zip(out_labels, outs):
