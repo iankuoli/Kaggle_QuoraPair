@@ -7,6 +7,36 @@ nltk.data.path.append('/home/ian/nltk_data')
 
 
 def word_patterns_replace(text):
+    text = re.sub(r"[^A-Za-z0-9^,!.\/'+-=]", " ", text)
+    text = re.sub(r"what's", "what is ", text)
+    text = re.sub(r"\'s", " ", text)
+    text = re.sub(r"\'ve", " have ", text)
+    text = re.sub(r"can't", "cannot ", text)
+    text = re.sub(r"n't", " not ", text)
+    text = re.sub(r"i'm", "i am ", text)
+    text = re.sub(r"\'re", " are ", text)
+    text = re.sub(r"\'d", " would ", text)
+    text = re.sub(r"\'ll", " will ", text)
+    text = re.sub(r",", " ", text)
+    text = re.sub(r"\.", " ", text)
+    text = re.sub(r"!", " ! ", text)
+    text = re.sub(r"\/", " ", text)
+    text = re.sub(r"\^", " ^ ", text)
+    text = re.sub(r"\+", " + ", text)
+    text = re.sub(r"\-", " - ", text)
+    text = re.sub(r"\=", " = ", text)
+    text = re.sub(r"'", " ", text)
+    text = re.sub(r"60k", " 60000 ", text)
+    text = re.sub(r":", " : ", text)
+    text = re.sub(r" e g ", " eg ", text)
+    text = re.sub(r" b g ", " bg ", text)
+    text = re.sub(r" u s ", " american ", text)
+    text = re.sub(r"\0s", "0", text)
+    text = re.sub(r" 9 11 ", "911", text)
+    text = re.sub(r"e - mail", "e_mail", text)
+    text = re.sub(r"j k", "jk", text)
+    text = re.sub(r"\s{2,}", " ", text)
+
     text = text.replace('?', ' ? ')
     text = text.replace(':', ' : ')
     text = text.replace(', ', ' , ')
@@ -43,7 +73,7 @@ def word_patterns_replace(text):
     text = re.sub(r'([0-9])[L,l][P,p][A,a] ', r'\1 kg ', text)
     text = re.sub(r'\$([0-9])', r'$ \1', text)
     text = re.sub(r'([0-9]) [V,v]', r'\1 volt', text)
-    
+
 
     # digit expression
     text = re.sub(r'([0-9]),([0-9])', r'\1\2', text)
