@@ -46,10 +46,14 @@ reload(sys)
 test_CVID = 1
 
 BASE_DIR = '../input/'
-EMBEDDING_FILE = '/data1/resources/GoogleNews-vectors-negative300.bin'
-TRAIN_DATA_FILE = '/data1/quora_pair/50q_pair.csv'
-VALID_DATA_FILE = '/data1/quora_pair/50q_pair.csv'
-TEST_DATA_FILE = '/data1/quora_pair/50q_pair_test.csv'
+# EMBEDDING_FILE = '/data1/resources/GoogleNews-vectors-negative300.bin'
+# TRAIN_DATA_FILE = '/data1/quora_pair/50q_pair.csv'
+# VALID_DATA_FILE = '/data1/quora_pair/50q_pair.csv'
+# TEST_DATA_FILE = '/data1/quora_pair/50q_pair_test.csv'
+EMBEDDING_FILE = '/home/csist/workspace/resources/GoogleNews-vectors-negative300.bin'
+TRAIN_DATA_FILE = '/home/csist/Dataset/QuoraQP/CV-' + str(test_CVID) + '_clean.csv'
+VALID_DATA_FILE = '/home/csist/Dataset/QuoraQP/CV' + str(test_CVID) + '_clean.csv'
+TEST_DATA_FILE = '/home/csist/Dataset/QuoraQP/test_clean.csv'
 MAX_SEQUENCE_LENGTH = 30
 MAX_NB_WORDS = 200000
 EMBEDDING_DIM = 300
@@ -63,13 +67,13 @@ rate_drop_dense = 0.15 + np.random.rand() * 0.25
 act = 'relu'
 re_weight = True  # whether to re-weight classes to fit the 17.5% share in test set
 
-STAMP = 'lstm_%d_%d_%.2f_%.2f' % (num_lstm, num_dense, rate_drop_lstm, rate_drop_dense)
+STAMP = '2l_cnn_%d_%d_%.2f_%.2f' % (num_lstm, num_dense, rate_drop_lstm, rate_drop_dense)
 
 #
 # Set CNN parameters
 # ---------------------------------------------------------------------------
-num_filters = 10
-filter_sizes = [3, 4, 5]
+num_filters = 50
+filter_sizes = [3, 4, 5, 6, 8]
 
 
 #
@@ -299,6 +303,12 @@ for ks in filter_sizes:
                   activation="relu",
                   strides=1)(embedded_sequences_1)
     conv = MaxPooling1D(pool_size=2)(conv)
+    conv = Conv1D(filters=num_filters,
+                  kernel_size=ks,
+                  padding='valid',
+                  activation="relu",
+                  strides=1)(conv)
+    conv = MaxPooling1D(pool_size=2)(conv)
     conv = Flatten()(conv)
     conv_blocks.append(conv)
 convs1 = concatenate(conv_blocks) if len(conv_blocks) > 1 else conv_blocks[0]
@@ -314,6 +324,12 @@ for ks in filter_sizes:
                    padding='valid',
                    activation="relu",
                    strides=1)(embedded_sequences_2)
+    conv2 = MaxPooling1D(pool_size=2)(conv2)
+    conv2 = Conv1D(filters=num_filters,
+                   kernel_size=ks,
+                   padding='valid',
+                   activation="relu",
+                   strides=1)(conv2)
     conv2 = MaxPooling1D(pool_size=2)(conv2)
     conv2 = Flatten()(conv2)
     conv_blocks.append(conv2)
@@ -377,8 +393,8 @@ model_checkpoint = ModelCheckpoint(bst_model_path, save_best_only=True, save_wei
 hist = model.fit([data_1_train, data_2_train],
                  labels_train,
                  validation_data=([data_1_valid, data_2_valid], labels_valid, weight_val),
-                 epochs=200, batch_size=10, shuffle=True,
-                 # epochs=200, batch_size=2048, shuffle=True,
+                 # epochs=200, batch_size=10, shuffle=True,
+                 epochs=200, batch_size=2048, shuffle=True,
                  class_weight=class_weight, callbacks=[early_stopping, model_checkpoint])
 
 model.load_weights(bst_model_path)
