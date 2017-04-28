@@ -3,7 +3,8 @@ from tensorflow.python.ops import tensor_array_ops, control_flow_ops
 
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
-from keras.layers import core, Dense, Input, LSTM, Embedding, Dropout, Activation, Conv2D, MaxPooling2D, Flatten, Multiply, Add, Lambda
+from keras.layers import core, Dense, Input, LSTM, Embedding, Dropout, Activation, Conv2D, MaxPooling2D, Flatten, \
+    Multiply, Add, Lambda
 from keras.backend import K
 from keras.layers.merge import concatenate
 from keras.models import Model
@@ -16,7 +17,7 @@ class Generator(object):
     def __init__(self, num_emb, batch_size, embed_dim, hidden_dim,
                  sequence_length, start_token,
                  learning_rate=0.01, reward_gamma=0.95):
-        self.num_embed = num_emb
+        self.num_vocab = num_emb
         self.batch_size = batch_size
         self.embed_dim = embed_dim
         self.hidden_dim = hidden_dim
@@ -32,7 +33,7 @@ class Generator(object):
         self.expected_reward = tf.Variable(tf.zeros([self.sequence_length]))
 
         with tf.variable_scope('generator'):
-            self.g_embeddings = tf.Variable(self.init_matrix([self.num_embed, self.embed_dim]))
+            self.g_embeddings = tf.Variable(self.init_matrix([self.num_vocab, self.embed_dim]))
             self.g_params.append(self.g_embeddings)
 
             # maps h_tm1 to h_t for generator
@@ -67,20 +68,26 @@ class Generator(object):
                                              dynamic_size=False, infer_shape=True)
 
         def _g_recurrence(i, x_t, h_tm1, gen_o, gen_x):
-            # LSTM operation unit
-            # Args:
+            # LSTM forward operation unit
+            # Args ------------
             #   i: counter
             #   x_t: input at time t
-            #   h_tm1: a tensor that packs [prev_hidden_state, prev_c]
+            #   h_tm1: a tensor that packs [prev_hidden_state, prev_c], i.e., h_{t-1}
             #   gen_o:
-            #   gen_x:
+            #   gen_x: to record each predicted input from t to T
+            # Returns ------------
+            #   i + 1: next counter
+            #   x_tp1: input at time (t+1), i.e., x_{t+1}
+            #   h_t: a tensor that packs [now_hidden_state, now_c], i.e., h_{t}
+            #   gen_o:
+            #   gen_x: add next_token to the list, i.e., to record each predicted input from t to T
 
             # hidden_memory_tuple
             # h_tm1: the previous tensor that packs [prev_hidden_state, prev_c]
             # h_t: the current tensor that packs [now_hidden_state, now_c]
             h_t = self.g_recurrent_unit(x_t, h_tm1)
 
-            # batch x vocab , logits not prob
+            # dim(o_t) = (batch_size, num_vocab), logits not prob
             # h_t: the current tensor that packs [now_hidden_state, now_c]
             # o_t: the output of LSTM at time t
             o_t = self.g_output_unit(h_t)
@@ -88,24 +95,28 @@ class Generator(object):
             log_prob = tf.log(tf.nn.softmax(o_t))
             next_token = tf.cast(tf.reshape(tf.multinomial(log_prob, 1), [self.batch_size]), tf.int32)
 
-            # Convert next_token to words (next input, i.e., x_{t+1})
-            # dim(x_tp1) = batch x embed_dim
+            # Convert next_token (vocabularies) to embeddings (next input, i.e., x_{t+1})
+            # dim(x_tp1) = (batch_size, embed_dim)
             x_tp1 = tf.nn.embedding_lookup(self.g_embeddings, next_token)
 
-            # [batch_size] , prob
-            gen_o = gen_o.write(i, tf.reduce_sum(tf.multiply(tf.one_hot(next_token, self.num_embed, 1.0, 0.0),
-                                                             tf.nn.softmax(o_t)), 1))
+            # dim(gen_o) = (batch_size, num_vocab), prob. dist. on vocab. vector
+            # reduce_sum(input_tensor, axis=1), row-wise summation
+            tmp = tf.multiply(tf.one_hot(next_token, self.num_vocab, 1.0, 0.0), tf.nn.softmax(o_t))
+            gen_o = gen_o.write(i, tf.reduce_sum(tmp, axis=1))
 
-            # indices, batch_size
+            # [indices, batch_size]
             gen_x = gen_x.write(i, next_token)
 
             return i + 1, x_tp1, h_t, gen_o, gen_x
 
         _, _, _, self.gen_o, self.gen_x = control_flow_ops.while_loop(
             cond=lambda i, _1, _2, _3, _4: i < self.sequence_length,
-            body=_g_recurrence,
+            body=_g_recurrence, # forward prediction
             loop_vars=(tf.constant(0, dtype=tf.int32),
-                       tf.nn.embedding_lookup(self.g_embeddings, self.start_token), self.h0, gen_o, gen_x))
+                       tf.nn.embedding_lookup(self.g_embeddings, self.start_token),
+                       self.h0,
+                       gen_o,
+                       gen_x))
 
         self.gen_x = self.gen_x.stack()  # seq_length x batch_size
         self.gen_x = tf.transpose(self.gen_x, perm=[1, 0])  # batch_size x seq_length
@@ -115,12 +126,10 @@ class Generator(object):
             dtype=tf.float32, size=self.sequence_length,
             dynamic_size=False, infer_shape=True)
 
-        ta_emb_x = tensor_array_ops.TensorArray(
-            dtype=tf.float32, size=self.sequence_length)
+        ta_emb_x = tensor_array_ops.TensorArray(dtype=tf.float32, size=self.sequence_length)
         ta_emb_x = ta_emb_x.unstack(self.processed_x)
 
         def _pretrain_recurrence(i, x_t, h_tm1, g_predictions):
-
             # LSTM transition
             # h_tm1: the previous tensor that packs [prev_hidden_state, prev_c]
             # h_t: the current tensor that packs [now_hidden_state, now_c]
@@ -133,23 +142,25 @@ class Generator(object):
 
             # batch x vocab_size
             g_predictions = g_predictions.write(i, tf.nn.softmax(o_t))
-            
+
             x_tp1 = ta_emb_x.read(i)
             return i + 1, x_tp1, h_t, g_predictions
 
         _, _, _, self.g_predictions = control_flow_ops.while_loop(
             cond=lambda i, _1, _2, _3: i < self.sequence_length,
-            body=_pretrain_recurrence,
+            body=_pretrain_recurrence, # forward prediction
             loop_vars=(tf.constant(0, dtype=tf.int32),
                        tf.nn.embedding_lookup(self.g_embeddings, self.start_token),
-                       self.h0, g_predictions))
+                       self.h0,
+                       g_predictions))
 
-        self.g_predictions = tf.transpose(self.g_predictions.stack(), perm=[1, 0, 2])  # batch_size x seq_length x vocab_size
+        self.g_predictions = tf.transpose(self.g_predictions.stack(),
+                                          perm=[1, 0, 2])  # batch_size x seq_length x vocab_size
 
         # pretraining loss
         self.pretrain_loss = -tf.reduce_sum(
-            tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])), self.num_embed, 1.0, 0.0) * tf.log(
-                tf.clip_by_value(tf.reshape(self.g_predictions, [-1, self.num_embed]), 1e-20, 1.0)
+            tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])), self.num_vocab, 1.0, 0.0) * tf.log(
+                tf.clip_by_value(tf.reshape(self.g_predictions, [-1, self.num_vocab]), 1e-20, 1.0)
             )
         ) / (self.sequence_length * self.batch_size)
 
@@ -164,8 +175,8 @@ class Generator(object):
         #######################################################################################################
         self.g_loss = -tf.reduce_sum(
             tf.reduce_sum(
-                tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])), self.num_embed, 1.0, 0.0) * tf.log(
-                    tf.clip_by_value(tf.reshape(self.g_predictions, [-1, self.num_embed]), 1e-20, 1.0)
+                tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])), self.num_vocab, 1.0, 0.0) * tf.log(
+                    tf.clip_by_value(tf.reshape(self.g_predictions, [-1, self.num_vocab]), 1e-20, 1.0)
                 ), 1) * tf.reshape(self.rewards, [-1])
         )
 
@@ -189,7 +200,6 @@ class Generator(object):
         return tf.zeros(shape)
 
     def create_recurrent_unit(self, params):
-
         # Define Weights and Bias for input and hidden tensor
         self.Wi = tf.Variable(self.init_matrix([self.embed_dim, self.hidden_dim]))
         self.Ui = tf.Variable(self.init_matrix([self.hidden_dim, self.hidden_dim]))
@@ -250,8 +260,8 @@ class Generator(object):
         return unit
 
     def create_output_unit(self, params):
-        self.Wo = tf.Variable(self.init_matrix([self.hidden_dim, self.num_embed]))
-        self.bo = tf.Variable(self.init_matrix([self.num_embed]))
+        self.Wo = tf.Variable(self.init_matrix([self.hidden_dim, self.num_vocab]))
+        self.bo = tf.Variable(self.init_matrix([self.num_vocab]))
         params.extend([self.Wo, self.bo])
 
         def unit(hidden_memory_tuple):
