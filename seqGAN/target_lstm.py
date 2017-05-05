@@ -135,7 +135,7 @@ class TARGET_LSTM(object):
         # ----------------------------------------------------------------------------
 
         #
-        # Pre-training loss
+        # Pre-training loss: dim(self.out_loss) = scale, i.e., (1)
         # ----------------------------------------------------------------------------
         self.pretrain_loss = -tf.reduce_sum(tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])),
                                                        self.num_emb, 1.0, 0.0) *

@@ -130,7 +130,10 @@ def main():
 
     log = open('save/experiment-log.txt', 'w')
 
-    #  pre-train generator
+
+    #
+    # Pre-train <generator> by using <target_lstm>
+    # ----------------------------------------------------------------------------
     print('Start pre-training...')
     log.write('pre-training...\n')
     for epoch in range(PRE_EPOCH_NUM):
@@ -142,12 +145,18 @@ def main():
             # load samples from file <eval_file>
             likelihood_data_loader.create_batches(eval_file)
 
-            # compute loss
+            # compute <pretrain_loss> of <target_lstm>, with input <likelihood_data_loader>
             test_loss = target_loss(sess, target_lstm, likelihood_data_loader)
+
             print('pre-train epoch ', epoch, 'test_loss ', test_loss)
             buffer = 'epoch:\t'+ str(epoch) + '\tnll:\t' + str(test_loss) + '\n'
             log.write(buffer)
+    # ----------------------------------------------------------------------------
 
+
+    #
+    # Pre-train <discriminator> by using <generator>
+    # ----------------------------------------------------------------------------
     print('Start pre-training discriminator...')
     # Train 3 epoch on the generated data and do this for 50 times
     for _ in range(50):
@@ -165,33 +174,44 @@ def main():
                         discriminator.input_y: y_batch,
                         discriminator.dropout_keep_prob: dis_dropout_keep_prob}
                 _ = sess.run(discriminator.train_op, feed)
+    # ----------------------------------------------------------------------------
 
     rollout = ROLLOUT(generator, 0.8)
 
+    #
+    # Start seqGAN, train <discriminator> and <generator>
+    # ----------------------------------------------------------------------------
     print('#########################################################################')
     print('Start Adversarial Training...')
     log.write('adversarial training...\n')
     for total_batch in range(TOTAL_BATCH):
-        # Train the generator for one step
+
+        # ----- Train the generator for one step -----------------
         for it in range(1):
             samples = generator.generate(sess)
             rewards = rollout.get_reward(sess, samples, 16, discriminator)
-            feed = {generator.x: samples, generator.rewards: rewards}
+            feed = {generator.x: samples,
+                    generator.rewards: rewards}
             _ = sess.run(generator.g_updates, feed_dict=feed)
+        # --------------------------------------------------------
 
-        # Test
+        # ----- Test
         if total_batch % 5 == 0 or total_batch == TOTAL_BATCH - 1:
             generate_samples(sess, generator, BATCH_SIZE, generated_num, eval_file)
             likelihood_data_loader.create_batches(eval_file)
+
+            #compute < pretrain_loss > of < target_lstm >, with input < likelihood_data_loader >
             test_loss = target_loss(sess, target_lstm, likelihood_data_loader)
+
             buffer = 'epoch:\t' + str(total_batch) + '\tnll:\t' + str(test_loss) + '\n'
             print('total_batch: ', total_batch, 'test_loss: ', test_loss)
             log.write(buffer)
+        # --------------------------------------------------------
 
         # Update roll-out parameters
         rollout.update_params()
 
-        # Train the discriminator
+        # ----- Train the discriminator -------------------------
         for _ in range(5):
             generate_samples(sess, generator, BATCH_SIZE, generated_num, negative_file)
             dis_data_loader.load_train_data(positive_file, negative_file)
@@ -206,6 +226,8 @@ def main():
                         discriminator.dropout_keep_prob: dis_dropout_keep_prob
                     }
                     _ = sess.run(discriminator.train_op, feed)
+        # --------------------------------------------------------
+    # ----------------------------------------------------------------------------
 
     log.close()
 
