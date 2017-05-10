@@ -5,7 +5,6 @@ from seqGAN.dataloader import Gen_Data_loader, Dis_dataloader
 from seqGAN.generator import Generator
 from seqGAN.discriminator import Discriminator
 from seqGAN.rollout import ROLLOUT
-from seqGAN.target_lstm import TARGET_LSTM
 import pickle
 
 #
@@ -130,16 +129,6 @@ def main():
 
 
     #
-    # Declare the oracle model
-    # ----------------------------------------------------------------------------
-    # declare: target_lstm
-    target_params = pickle.load(open('save/target_params.pkl'))
-    # The oracle model: target_lstm
-    target_lstm = TARGET_LSTM(vocab_size, BATCH_SIZE, EMB_DIM, HIDDEN_DIM, SEQ_LENGTH, START_TOKEN, target_params)
-    # ----------------------------------------------------------------------------
-
-
-    #
     # Set the session <sess>
     # ----------------------------------------------------------------------------
     config = tf.ConfigProto()
@@ -219,22 +208,6 @@ def main():
             feed = {generator.x: samples,
                     generator.rewards: rewards}
             _ = sess.run(generator.g_updates, feed_dict=feed)
-        # --------------------------------------------------------
-
-        # ----- Testing ------------------------------------------
-        # Use the generated data as input of <target_lstm>.
-        # If the output of <target_lstm> at time t is the same with the input at time (t+1),
-        # we can say that generator is similar to the <target_lstm>.
-        if total_batch % 5 == 0 or total_batch == TOTAL_BATCH - 1:
-            generate_samples(sess, generator, BATCH_SIZE, generated_num, eval_file)
-            likelihood_data_loader.create_batches(eval_file)
-
-            #compute <target_loss> of <target_lstm>, with input <likelihood_data_loader>
-            test_loss = target_loss(sess, target_lstm, likelihood_data_loader)
-
-            buffer = 'epoch:\t' + str(total_batch) + '\tnll:\t' + str(test_loss) + '\n'
-            print('total_batch: ', total_batch, 'test_loss: ', test_loss)
-            log.write(buffer)
         # --------------------------------------------------------
 
         # Update roll-out parameters

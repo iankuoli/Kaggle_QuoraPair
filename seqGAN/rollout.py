@@ -141,8 +141,8 @@ class ROLLOUT(object):
         # Returns ------------
         #   rewards:
         rewards = [0.] * sequence_length
-        for i in range(rollout_num):
-            for given_num in range(1, sequence_length):
+        for i in range(rollout_num):  # for n = 1 to N
+            for given_num in range(1, sequence_length):  # for t = 1 to (T-1)
                 feed = {self.x: input_x, self.given_num: given_num}
                 samples = sess.run(self.gen_x, feed)
 
@@ -156,7 +156,7 @@ class ROLLOUT(object):
                 # else:
                 #     rewards[given_num - 1] += ypred
 
-            # the last token reward
+            # the last token reward, i.e., t = T
             feed = {discriminator.input_x: input_x, discriminator.dropout_keep_prob: 1.0}
             ypred_for_auc = sess.run(discriminator.ypred_for_auc, feed)
             ypred = np.array([item[1] for item in ypred_for_auc])

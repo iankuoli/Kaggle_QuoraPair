@@ -1,21 +1,22 @@
 import tensorflow as tf
 import numpy as np
 
+
 # An alternative to tf.nn.rnn_cell._linear function, which has been removed in Tensorfow 1.0.1
 # The highway layer is borrowed from https://github.com/mkroutikov/tf-lstm-char-cnn
 def linear(input_, output_size, scope=None):
     '''
     Linear map: output[k] = sum_i(Matrix[k, i] * input_[i] ) + Bias[k]
     Args:
-      input_: a tensor or a list of 2D, batch x n, Tensors.
-      output_size: int, second dimension of W[i].
+    input_: a tensor or a list of 2D, batch x n, Tensors.
+    output_size: int, second dimension of W[i].
     scope: VariableScope for the created subgraph; defaults to "Linear".
-      Returns:
-      A 2D Tensor with shape [batch x output_size] equal to
-      sum_i(input_[i] * W[i]), where W[i]s are newly created matrices.
-    Raises:
-      ValueError: if some of the arguments has unspecified or wrong shape.
-    '''
+  Returns:
+    A 2D Tensor with shape [batch x output_size] equal to
+    sum_i(input_[i] * W[i]), where W[i]s are newly created matrices.
+  Raises:
+    ValueError: if some of the arguments has unspecified or wrong shape.
+  '''
 
     shape = input_.get_shape().as_list()
     if len(shape) != 2:
@@ -30,6 +31,7 @@ def linear(input_, output_size, scope=None):
         bias_term = tf.get_variable("Bias", [output_size], dtype=input_.dtype)
 
     return tf.matmul(input_, tf.transpose(matrix)) + bias_term
+
 
 def highway(input_, size, num_layers=1, bias=-2.0, f=tf.nn.relu, scope='Highway'):
     """Highway Network (cf. http://arxiv.org/abs/1505.00387).
@@ -49,23 +51,16 @@ def highway(input_, size, num_layers=1, bias=-2.0, f=tf.nn.relu, scope='Highway'
 
     return output
 
+
 class Discriminator(object):
     """
     A CNN for text classification.
     Uses an embedding layer, followed by a convolutional, max-pooling and softmax layer.
-    Args:
-      sequence_length: the length of a sequence
-      num_classes: the dimensionality of output vector, i.e., number of classes
-      vocab_size: the number of vocabularies
-      embedding_size: the dimensionality of an embedding vector
-      filter_sizes: filter size
-      num_filters: number of filter
-      l2_reg_lambda: lambda, a parameter for L2 regularizer
     """
 
-    def __init__(self, sequence_length, num_classes, vocab_size,
-                 embedding_size, filter_sizes, num_filters, l2_reg_lambda=0.0):
-
+    def __init__(
+            self, sequence_length, num_classes, vocab_size,
+            embedding_size, filter_sizes, num_filters, l2_reg_lambda=0.0):
         # Placeholders for input, output and dropout
         self.input_x = tf.placeholder(tf.int32, [None, sequence_length], name="input_x")
         self.input_y = tf.placeholder(tf.float32, [None, num_classes], name="input_y")
@@ -73,42 +68,17 @@ class Discriminator(object):
 
         # Keeping track of l2 regularization loss (optional)
         l2_loss = tf.constant(0.0)
-        
+
         with tf.variable_scope('discriminator'):
-
-            #
             # Embedding layer
-            #
-            # ---------------- keras version ----------------
-            from keras.preprocessing.text import Tokenizer
-            from keras.preprocessing.sequence import pad_sequences
-            from keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation
-            from keras.layers.merge import concatenate
-            from keras.models import Model
-            from keras.layers.normalization import BatchNormalization
-            from keras.callbacks import EarlyStopping, ModelCheckpoint
-
-            # MAX_SEQUENCE_LENGTH = 30
-            # self.W = tf.Variable(tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0), name="W")
-            # self.W = Embedding(vocab_size,
-            #                    embedding_size,
-            #                    weights=[tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0)],
-            #                    input_length=MAX_SEQUENCE_LENGTH,
-            #                    trainable=False)
-            # self.embedded_chars = self.W(self.input)
-            # -----------------------------------------------
             with tf.device('/cpu:0'), tf.name_scope("embedding"):
-                self.W = tf.Variable( tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0),
-                                      name="W")
+                self.W = tf.Variable(
+                    tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0),
+                    name="W")
                 self.embedded_chars = tf.nn.embedding_lookup(self.W, self.input_x)
                 self.embedded_chars_expanded = tf.expand_dims(self.embedded_chars, -1)
 
-            #
             # Create a convolution + maxpool layer for each filter size
-            #
-            # ---------------- keras version ----------------
-
-            # -----------------------------------------------
             pooled_outputs = []
             for filter_size, num_filter in zip(filter_sizes, num_filters):
                 with tf.name_scope("conv-maxpool-%s" % filter_size):
@@ -116,14 +86,15 @@ class Discriminator(object):
                     filter_shape = [filter_size, embedding_size, 1, num_filter]
                     W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
                     b = tf.Variable(tf.constant(0.1, shape=[num_filter]), name="b")
-                    conv = tf.nn.conv2d(self.embedded_chars_expanded,
-                                        W,
-                                        strides=[1, 1, 1, 1],
-                                        padding="VALID",
-                                        name="conv")
-                    # Apply non-linearity
+                    conv = tf.nn.conv2d(
+                        self.embedded_chars_expanded,
+                        W,
+                        strides=[1, 1, 1, 1],
+                        padding="VALID",
+                        name="conv")
+                    # Apply nonlinearity
                     h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
-                    # Max-pooling over the outputs
+                    # Maxpooling over the outputs
                     pooled = tf.nn.max_pool(
                         h,
                         ksize=[1, sequence_length - filter_size + 1, 1, 1],
@@ -131,7 +102,7 @@ class Discriminator(object):
                         padding='VALID',
                         name="pool")
                     pooled_outputs.append(pooled)
-            
+
             # Combine all the pooled features
             num_filters_total = sum(num_filters)
             self.h_pool = tf.concat(pooled_outputs, 3)
@@ -163,4 +134,4 @@ class Discriminator(object):
         self.params = [param for param in tf.trainable_variables() if 'discriminator' in param.name]
         d_optimizer = tf.train.AdamOptimizer(1e-4)
         grads_and_vars = d_optimizer.compute_gradients(self.loss, self.params, aggregation_method=2)
-        self.train_op = d_optimizer.apply_gradients(grads_and_vars)
+        self.  train_op = d_optimizer.apply_gradients(grads_and_vars)
