@@ -174,12 +174,14 @@ class Generator(object):
         self.g_predictions = tf.transpose(self.g_predictions.stack(), perm=[1, 0, 2])
 
         #
-        # Pre-training loss
+        # Pre-training loss: between generated samples and oracle data
         # ----------------------------------------------------------------------------
-        tmp = tf.log(tf.clip_by_value(tf.reshape(self.g_predictions, [-1, self.num_vocab]), 1e-20, 1.0))
-        self.pretrain_loss = -tf.reduce_sum(tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])),
-                                                       self.num_vocab, 1.0, 0.0) * tmp
-                                            ) / (self.sequence_length * self.batch_size)
+        # dim(tmp1) = (len(self.x), self.num_vocab) <=== self.x
+        # dim(tmp2) = (len(self.g_predictions), self.num_vocab) <=== self.g_predictions
+        # dim(tf.reduce_sum(tmp1 * tmp2)) = (1,)
+        tmp1 = tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])), self.num_vocab, 1.0, 0.0)
+        tmp2 = tf.log(tf.clip_by_value(tf.reshape(self.g_predictions, [-1, self.num_vocab]), 1e-20, 1.0))
+        self.pretrain_loss = -tf.reduce_sum(tmp1 * tmp2) / (self.sequence_length * self.batch_size)
 
         #
         # Training updates
@@ -196,10 +198,12 @@ class Generator(object):
         #
         # Unsupervised Training
         # ----------------------------------------------------------------------------
-        self.g_loss = -tf.reduce_sum(tf.reduce_sum(tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])),
-                                                              self.num_vocab, 1.0, 0.0) *
-                                                   tf.log(tf.clip_by_value(tf.reshape(self.g_predictions, [-1, self.num_vocab]), 1e-20, 1.0)),
-                                                   1) * tf.reshape(self.rewards, [-1]))
+        # dim(tmp3) = (len(self.x), self.num_vocab) <=== self.x
+        # dim(tmp4) = (len(self.g_predictions), self.num_vocab) <=== self.g_predictions
+        # dim(tf.reduce_sum(tmp3 * tmp4, 1)) = (len(self.x),)
+        tmp3 = tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])), self.num_vocab, 1.0, 0.0)
+        tmp4 = tf.log(tf.clip_by_value(tf.reshape(self.g_predictions, [-1, self.num_vocab]), 1e-20, 1.0))
+        self.g_loss = -tf.reduce_sum(tf.reduce_sum(tmp3 * tmp4, 1) * tf.reshape(self.rewards, [-1]))
 
         # Set the optimizer (default is AdamOptimizer)
         g_opt = self.g_optimizer(self.learning_rate)

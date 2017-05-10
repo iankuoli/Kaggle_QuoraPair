@@ -69,14 +69,33 @@ class TARGET_LSTM(object):
             #   h_t: a tensor that packs [now_hidden_state, now_c], i.e., h_{t}
             #   gen_o:
             #   gen_x: add next_token to the list, i.e., to record each predicted input from (t+1) to T
-            h_t = self.g_recurrent_unit(x_t, h_tm1)  # hidden_memory_tuple
-            o_t = self.g_output_unit(h_t)  # batch x vocab , logits not prob
+
+            # hidden_memory_tuple
+            # h_tm1: the previous tensor that packs [prev_hidden_state, prev_c]
+            # h_t: the current tensor that packs [now_hidden_state, now_c]
+            h_t = self.g_recurrent_unit(x_t, h_tm1)
+
+            # dim(o_t) = (batch_size, num_vocab), logits not prob
+            # h_t: the current tensor that packs [now_hidden_state, now_c]
+            # o_t: the output of LSTM at time t
+            o_t = self.g_output_unit(h_t)
+
             log_prob = tf.log(tf.nn.softmax(o_t))
             next_token = tf.cast(tf.reshape(tf.multinomial(log_prob, 1), [self.batch_size]), tf.int32)
-            x_tp1 = tf.nn.embedding_lookup(self.g_embeddings, next_token)  # batch x emb_dim
-            gen_o = gen_o.write(i, tf.reduce_sum(tf.multiply(tf.one_hot(next_token, self.num_emb, 1.0, 0.0),
-                                                             tf.nn.softmax(o_t)), 1))  # [batch_size] , prob
-            gen_x = gen_x.write(i, next_token)  # indices, batch_size
+
+            # Convert next_token (vocabularies) to embeddings (next input, i.e., x_{t+1})
+            # dim(x_tp1) = (batch_size, embed_dim)
+            x_tp1 = tf.nn.embedding_lookup(self.g_embeddings, next_token)
+
+            # dim(gen_o) = (batch_size, num_vocab), prob. dist. on vocab. vector
+            # e.g., [3, 2, 1] == softmax ==> [0.665, 0.244, 0.09] == * one_hot ==> [0.665, 0, 0]
+            # reduce_sum(input_tensor, axis=1), row-wise summation
+            tmp = tf.multiply(tf.one_hot(next_token, self.num_vocab, 1.0, 0.0), tf.nn.softmax(o_t))
+            gen_o = gen_o.write(i, tf.reduce_sum(tmp, 1))
+
+            # dim(gen_x) = (indices, batch_size)
+            gen_x = gen_x.write(i, next_token)
+
             return i + 1, x_tp1, h_t, gen_o, gen_x
 
         _, _, _, self.gen_o, self.gen_x = control_flow_ops.while_loop(cond=lambda i, _1, _2, _3, _4: i < self.sequence_length,
@@ -137,21 +156,21 @@ class TARGET_LSTM(object):
         #
         # Pre-training loss: dim(self.out_loss) = scale, i.e., (1)
         # ----------------------------------------------------------------------------
-        self.pretrain_loss = -tf.reduce_sum(tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])),
-                                                       self.num_emb, 1.0, 0.0) *
-                                            tf.log(tf.reshape(self.g_predictions, [-1, self.num_emb]))
-                                            ) / (self.sequence_length * self.batch_size)
+        # dim(tmp1) = (len(self.x), self.num_vocab) <=== self.x
+        tmp1 = tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])), self.num_emb, 1.0, 0.0)
+        # dim(tmp2) = (len(self.x), self.num_vocab) <=== self.g_predictions
+        tmp2 = tf.log(tf.reshape(self.g_predictions, [-1, self.num_emb]))
+        self.pretrain_loss = -tf.reduce_sum(tmp1 * tmp2) / (self.sequence_length * self.batch_size)
         # ----------------------------------------------------------------------------
 
         #
         # Output loss: dim(self.out_loss) = (batch_size)
         # ----------------------------------------------------------------------------
-        self.out_loss = \
-            tf.reduce_sum(tf.reshape(-tf.reduce_sum(tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])),
-                                                               self.num_emb, 1.0, 0.0) *
-                                                    tf.log(tf.reshape(self.g_predictions, [-1, self.num_emb])), 1),
-                                     [-1, self.sequence_length]),
-                          1)
+        # dim(tmp1) = (len(self.x), self.num_vocab) <=== self.x
+        tmp1 = tf.one_hot(tf.to_int32(tf.reshape(self.x, [-1])), self.num_emb, 1.0, 0.0)
+        # dim(tmp2) = (len(self.x), self.num_vocab) <=== self.g_predictions
+        tmp2 = tf.log(tf.reshape(self.g_predictions, [-1, self.num_emb]))
+        self.out_loss = tf.reduce_sum(tf.reshape(-tf.reduce_sum(tmp1 * tmp2, 1), [-1, self.sequence_length]), 1)
         # ----------------------------------------------------------------------------
 
     def generate(self, session):
