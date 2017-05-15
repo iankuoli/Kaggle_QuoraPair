@@ -136,11 +136,11 @@ def get_continuous_chunks(text):
     if named_entity not in continuous_chunk:
        continuous_chunk.append(named_entity)
     return continuous_chunk
-# SS ="I'm a 19-year-old. How can I improve my skills or what should I do to become an entrepreneur in the next few years "
+SS ="I'm a 19-year-old. How can I improve my skills or what should I do to become an entrepreneur in the next few years "
 #SS = "I am a 19-year-old. man who love neural-based paper and F-14 flight"
 #TXT = "Barack Obama is the husband of Michelle Obama"
-#print(tokenizer(SS))
-# print(word_patterns_replace(SS))
+# print(tokenizer(SS))
+print(word_patterns_replace(SS))
 #print(get_continuous_chunks(TXT))
 #TXT = "\"Ted's Indian-made <20K 10 V dicks that cost <$10,000 hasn't been detected/protected at (9+2)/11 with [/math] and MOOCs/E-learning (900/1,800 bpm Tu-95).\n PIF: 14-years-old Trump–Clinton U.S. Presidential debate is good for 10Km? <\html>\""
 #TXT = "What is the output for in main {char *ptr=""hello""; ptr [0] ='m'; printf (""%s"" , *s);} ?"
