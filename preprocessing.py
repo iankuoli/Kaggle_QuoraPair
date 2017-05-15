@@ -3,7 +3,7 @@ import nltk
 from nltk.corpus import wordnet
 from nltk import ne_chunk, pos_tag, word_tokenize
 from nltk.tree import Tree
-nltk.data.path.append('/home/ian/nltk_data')
+nltk.data.path.append('/data1/nltk_data')
 
 
 def word_patterns_replace(text):
@@ -17,13 +17,13 @@ def word_patterns_replace(text):
     text = re.sub(r"\'re", " are ", text)
     text = re.sub(r"\'d", " would ", text)
     text = re.sub(r"\'ll", " will ", text)
+    text = re.sub(r',([0-9])', r'\1', text)
     text = re.sub(r",", " ", text)
     text = re.sub(r"\.", " ", text)
     text = re.sub(r"!", " ! ", text)
     text = re.sub(r"\/", " ", text)
     text = re.sub(r"\^", " ^ ", text)
     text = re.sub(r"\+", " + ", text)
-    text = re.sub(r"\-", " - ", text)
     text = re.sub(r"\=", " = ", text)
     text = re.sub(r"'", " ", text)
     text = re.sub(r"60k", " 60000 ", text)
@@ -73,6 +73,8 @@ def word_patterns_replace(text):
     text = re.sub(r'([0-9])[L,l][P,p][A,a] ', r'\1 kg ', text)
     text = re.sub(r'\$([0-9])', r'$ \1', text)
     text = re.sub(r'([0-9]) [V,v]', r'\1 volt', text)
+    text = re.sub(r'([0-9])\-[V,v]', r'\1 volt', text)
+    text = re.sub(r'([0-9])[K,k][V,v][A,a]', r'\1 kVA', text)
 
 
     # digit expression
@@ -83,6 +85,8 @@ def word_patterns_replace(text):
     text = text.replace('  ', ' ')
 
     text = tokenizer(text)
+
+    text = re.sub(r"\-", " - ", text)
 
     return text
 
@@ -132,10 +136,11 @@ def get_continuous_chunks(text):
     if named_entity not in continuous_chunk:
        continuous_chunk.append(named_entity)
     return continuous_chunk
-
-#SS = "I am a 19-year-old man who love neural-based paper and F-14 flight"
+# SS ="I'm a 19-year-old. How can I improve my skills or what should I do to become an entrepreneur in the next few years "
+#SS = "I am a 19-year-old. man who love neural-based paper and F-14 flight"
 #TXT = "Barack Obama is the husband of Michelle Obama"
 #print(tokenizer(SS))
+# print(word_patterns_replace(SS))
 #print(get_continuous_chunks(TXT))
 #TXT = "\"Ted's Indian-made <20K 10 V dicks that cost <$10,000 hasn't been detected/protected at (9+2)/11 with [/math] and MOOCs/E-learning (900/1,800 bpm Tu-95).\n PIF: 14-years-old Trump–Clinton U.S. Presidential debate is good for 10Km? <\html>\""
 #TXT = "What is the output for in main {char *ptr=""hello""; ptr [0] ='m'; printf (""%s"" , *s);} ?"
