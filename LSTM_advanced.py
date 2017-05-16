@@ -9,8 +9,6 @@ All you need is a GPU!!!!!!!
 #
 # Import packages
 # ----------------------------------------------------------------------------
-import os
-import re
 import csv
 import codecs
 import numpy as np
@@ -18,7 +16,6 @@ import pandas as pd
 
 from nltk.corpus import stopwords
 from nltk.stem import SnowballStemmer
-from string import punctuation
 
 from gensim.models import KeyedVectors
 from keras.preprocessing.text import Tokenizer
@@ -54,8 +51,8 @@ MAX_NB_WORDS = 200000
 EMBEDDING_DIM = 300
 VALIDATION_SPLIT = 0.1
 
-num_lstm = np.random.randint(175, 275)
-num_dense = np.random.randint(100, 150)
+num_lstm = 250#np.random.randint(175, 275)
+num_dense = 150#np.random.randint(100, 150)
 rate_drop_lstm = 0.15 + np.random.rand() * 0.25
 rate_drop_dense = 0.15 + np.random.rand() * 0.25
 
@@ -99,37 +96,6 @@ def text_to_wordlist(text, remove_stopwords=False, stem_words=False):
 
     # Clean the text
     text = preprocessing.word_patterns_replace(text)
-    '''
-    text = re.sub(r"[^A-Za-z0-9^,!.\/'+-=]", " ", text)
-    text = re.sub(r"what's", "what is ", text)
-    text = re.sub(r"\'s", " ", text)
-    text = re.sub(r"\'ve", " have ", text)
-    text = re.sub(r"can't", "cannot ", text)
-    text = re.sub(r"n't", " not ", text)
-    text = re.sub(r"i'm", "i am ", text)
-    text = re.sub(r"\'re", " are ", text)
-    text = re.sub(r"\'d", " would ", text)
-    text = re.sub(r"\'ll", " will ", text)
-    text = re.sub(r",", " ", text)
-    text = re.sub(r"\.", " ", text)
-    text = re.sub(r"!", " ! ", text)
-    text = re.sub(r"\/", " ", text)
-    text = re.sub(r"\^", " ^ ", text)
-    text = re.sub(r"\+", " + ", text)
-    text = re.sub(r"\-", " - ", text)
-    text = re.sub(r"\=", " = ", text)
-    text = re.sub(r"'", " ", text)
-    text = re.sub(r"60k", " 60000 ", text)
-    text = re.sub(r":", " : ", text)
-    text = re.sub(r" e g ", " eg ", text)
-    text = re.sub(r" b g ", " bg ", text)
-    text = re.sub(r" u s ", " american ", text)
-    text = re.sub(r"\0s", "0", text)
-    text = re.sub(r" 9 11 ", "911", text)
-    text = re.sub(r"e - mail", "e_mail", text)
-    text = re.sub(r"j k", "jk", text)
-    text = re.sub(r"\s{2,}", " ", text)
-    '''
 
     # Optionally, shorten words to their stems
     # Ex. >>> print(stemmer.stem("running"))
@@ -316,13 +282,19 @@ lstm_layer = LSTM(num_lstm, dropout=rate_drop_lstm, recurrent_dropout=rate_drop_
 
 sequence_1_input = Input(shape=(MAX_SEQUENCE_LENGTH,), dtype='int32')
 embedded_sequences_1 = embedding_layer(sequence_1_input)
-x1 = lstm_layer(embedded_sequences_1)
+trans_embedded_sequences_1 = Dense(num_dense, activation=act)(embedded_sequences_1)
+trans_embedded_sequences_1 = Dropout(rate_drop_dense)(trans_embedded_sequences_1)
+trans_merged1 = concatenate([embedded_sequences_1, trans_embedded_sequences_1])
+x1 = lstm_layer(trans_merged1)
 
 sequence_2_input = Input(shape=(MAX_SEQUENCE_LENGTH,), dtype='int32')
 embedded_sequences_2 = embedding_layer(sequence_2_input)
-y1 = lstm_layer(embedded_sequences_2)
+trans_embedded_sequences_2 = Dense(num_dense, activation=act)(embedded_sequences_2)
+trans_embedded_sequences_2 = Dropout(rate_drop_dense)(trans_embedded_sequences_2)
+trans_merged2 = concatenate([embedded_sequences_2, trans_embedded_sequences_2])
+x2 = lstm_layer(trans_merged2)
 
-merged = concatenate([x1, y1])
+merged = concatenate([x1, x2])
 merged = Dropout(rate_drop_dense)(merged)
 
 merged = BatchNormalization()(merged)

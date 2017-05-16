@@ -285,19 +285,13 @@ lstm_layer = LSTM(num_lstm, dropout=rate_drop_lstm, recurrent_dropout=rate_drop_
 
 sequence_1_input = Input(shape=(MAX_SEQUENCE_LENGTH,), dtype='int32')
 embedded_sequences_1 = embedding_layer(sequence_1_input)
-trans_embedded_sequences_1 = Dense(num_dense, activation=act)(embedded_sequences_1)
-trans_embedded_sequences_1 = Dropout(rate_drop_dense)(trans_embedded_sequences_1)
-trans_merged1 = concatenate([embedded_sequences_1, trans_embedded_sequences_1])
-x1 = lstm_layer(trans_merged1)
+x1 = lstm_layer(embedded_sequences_1)
 
 sequence_2_input = Input(shape=(MAX_SEQUENCE_LENGTH,), dtype='int32')
 embedded_sequences_2 = embedding_layer(sequence_2_input)
-trans_embedded_sequences_2 = Dense(num_dense, activation=act)(embedded_sequences_2)
-trans_embedded_sequences_2 = Dropout(rate_drop_dense)(trans_embedded_sequences_2)
-trans_merged2 = concatenate([embedded_sequences_2, trans_embedded_sequences_2])
-x2 = lstm_layer(trans_merged2)
+y1 = lstm_layer(embedded_sequences_2)
 
-merged = concatenate([x1, x2])
+merged = concatenate([x1, y1])
 merged = Dropout(rate_drop_dense)(merged)
 
 merged = BatchNormalization()(merged)
