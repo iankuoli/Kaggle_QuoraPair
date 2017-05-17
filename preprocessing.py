@@ -7,6 +7,20 @@ nltk.data.path.append('/data1/nltk_data')
 
 
 def word_patterns_replace(text):
+    # Transfer special chars
+    text = re.sub('\$', " dollar ", text)
+    text = re.sub('\%', " percent ", text)
+    # text = re.sub('\&', " and ", text)  # 'and' is no in w2v but '&' have vec in w2v...
+    text = re.sub("…", " ", text)
+    text = re.sub("é", "e", text)
+
+    # Remove comma between numbers, i.e. 15,000 -> 15000
+    text = re.sub('(?<=[0-9])\,(?=[0-9])', "", text)
+
+    # replace the float numbers with a random number, it will be parsed as number afterward, and also been replaced with word "number"
+    text = re.sub('[0-9]+\.[0-9]+', " 1 ", text)
+
+    # Clean shorthands
     text = re.sub(r"[^A-Za-z0-9^,!.\/'+-=]", " ", text)
     text = re.sub(r"what's", "what is ", text)
     text = re.sub(r"\'s", " ", text)
@@ -17,10 +31,11 @@ def word_patterns_replace(text):
     text = re.sub(r"\'re", " are ", text)
     text = re.sub(r"\'d", " would ", text)
     text = re.sub(r"\'ll", " will ", text)
-    text = re.sub(r',([0-9])', r'\1', text)
+
     text = re.sub(r",", " ", text)
     text = re.sub(r"\.", " ", text)
     text = re.sub(r"!", " ! ", text)
+    text = re.sub(r" 9 11 ", "911", text)
     text = re.sub(r"\/", " ", text)
     text = re.sub(r"\^", " ^ ", text)
     text = re.sub(r"\+", " + ", text)
@@ -32,9 +47,10 @@ def word_patterns_replace(text):
     text = re.sub(r" b g ", " bg ", text)
     text = re.sub(r" u s ", " american ", text)
     text = re.sub(r"\0s", "0", text)
-    text = re.sub(r" 9 11 ", "911", text)
     text = re.sub(r"e - mail", "e_mail", text)
-    text = re.sub(r"j k", "jk", text)
+    text = re.sub(r" j k ", " JK ", text)
+    text = re.sub(r" J K ", " JK ", text)
+    text = re.sub(r" J\.K\. ", " JK ", text)
     text = re.sub(r"\s{2,}", " ", text)
 
     text = text.replace('?', ' ? ')
@@ -50,7 +66,7 @@ def word_patterns_replace(text):
     text = text.replace('n\'t ', ' not ')
     text = text.replace('\'m ', ' \'m ')
 
-    # detection symbol or tag
+    # Detection symbol or tag
     text = text.replace('/', ' / ')
     text = re.sub(r"([\W]) / ([A-Za-z])", r"\1/\2", text)
     text = text.replace('<$', ' < $')
@@ -58,26 +74,32 @@ def word_patterns_replace(text):
 
     #text = re.sub(r"[\W] / [\w]", "/", text)
 
-    # detect brief expression
+    # Detect brief expression
     text = re.sub(r'((.[A-Z])+) \.', r'\1.', text)
 
-    # detect unit
-    text = re.sub(r'([0-9])[M,m][H,h][Z,z]', r'\1 mhz', text)
-    text = re.sub(r'([0-9])[H,h][Z,z]', r'\1 hz', text)
-    text = re.sub(r'([0-9])[B,b][P,p][M,m]', r'\1 bpm', text)
+    # Detect unit
+    text = re.sub(r'([0-9])[M,m][H,h][Z,z]', r'\1 mhz ', text)
+    text = re.sub(r'([0-9])[H,h][Z,z]', r'\1 hz ', text)
+    text = re.sub(r'([0-9])[B,b][P,p][M,m]', r'\1 bpm ', text)
     text = re.sub(r'([0-9])[K,k][M,m] ', r'\1 km ', text)
     text = re.sub(r'([0-9])[C,c][M,m] ', r'\1 cm ', text)
     text = re.sub(r'([0-9])[K,k][G,g] ', r'\1 kg ', text)
+    text = re.sub(r'([0-9])[K,k][G,g][S,s] ', r'\1 kgs ', text)
     text = re.sub(r'([0-9])[M,m][G,g] ', r'\1 mg ', text)
-    text = re.sub(r'([0-9])[M,m][L,l] ', r'\1 kg ', text)
+    text = re.sub(r'([0-9])[M,m][L,l] ', r'\1 ml ', text)
+    text = re.sub(r'([0-9])[M,m][S,s] ', r'\1 ms ', text)
     text = re.sub(r'([0-9])[L,l][P,p][A,a] ', r'\1 kg ', text)
-    text = re.sub(r'\$([0-9])', r'$ \1', text)
-    text = re.sub(r'([0-9]) [V,v]', r'\1 volt', text)
-    text = re.sub(r'([0-9])\-[V,v]', r'\1 volt', text)
-    text = re.sub(r'([0-9])[K,k][V,v][A,a]', r'\1 kVA', text)
+    text = re.sub(r'\$([0-9])', r'$ \1 ', text)
+    text = re.sub(r'([0-9]) [V,v]', r'\1 volt ', text)
+    text = re.sub(r'([0-9])[V,v]', r'\1 volt ', text)
+    text = re.sub(r'([0-9])\-[V,v]', r'\1 volt ', text)
+    text = re.sub(r'([0-9])[K,k][V,v][A,a]', r'\1 kVA ', text)
+    text = re.sub(r'([0-9])[K,k][P,p][H,h]', r'\1 kph ', text)
+    text = re.sub(r'([0-9])[M,m][P,p][H,h]', r'\1 mph ', text)
+    text = re.sub(r'([0-9])hours', r'\1 hours ', text)
+    text = re.sub(r'([0-9])hour', r'\1 hour ', text)
 
-
-    # digit expression
+    # Digit expression
     text = re.sub(r'([0-9]),([0-9])', r'\1\2', text)
     text = re.sub(r'([0-9])[K,k] ', r'\g<1>000 ', text)
     text = re.sub(r'([0-9])\+([0-9])', r'\1 + \2', text)
@@ -136,18 +158,20 @@ def get_continuous_chunks(text):
     if named_entity not in continuous_chunk:
        continuous_chunk.append(named_entity)
     return continuous_chunk
-SS ="I'm a 19-year-old. How can I improve my skills or what should I do to become an entrepreneur in the next few years "
+# SS ="I'm a 19-year-old. I spend $5000 which is 20% of my 9/11 sayings… . Aréaééé 0.999 5kgs 10kg 555kph 5hours e-mail e - mail? jj korea J.K."
+# SSS = "'online' ‘god’ 'suroor' 'non aspiration' dyke” 'dm ''biba'' 'couldn't've 'mia mia' if “膜”  ‘weekends’ player’s ‘would’ ‘would ''how “her”"
 #SS = "I am a 19-year-old. man who love neural-based paper and F-14 flight"
 #TXT = "Barack Obama is the husband of Michelle Obama"
 # print(tokenizer(SS))
-print(word_patterns_replace(SS))
+# print(word_patterns_replace(SS)+'\n')
+# print(word_patterns_replace(SSS)+'\n')
 #print(get_continuous_chunks(TXT))
 #TXT = "\"Ted's Indian-made <20K 10 V dicks that cost <$10,000 hasn't been detected/protected at (9+2)/11 with [/math] and MOOCs/E-learning (900/1,800 bpm Tu-95).\n PIF: 14-years-old Trump–Clinton U.S. Presidential debate is good for 10Km? <\html>\""
 #TXT = "What is the output for in main {char *ptr=""hello""; ptr [0] ='m'; printf (""%s"" , *s);} ?"
 #TXT = "If light has zero mass , then as per this [math]E=mc^2[/math] , light must have zero energy. Is it so ?"
 #TXT = "What is the story of Kohinoor (Koh-i-Noor) Diamond"
-TXT="How would I find the necessary number of turns on a transformer primary if the secondary voltage required is 120 V at 60 Hz ?"
-TXT="A distribution transformer is rated at 18 kVA , 20,000/480 V , and 60 hz. can this transformer safely supply 15kVA to a 415-V load at 50hz ? Why or not ?"
+# TXT="How would I find the necessary number of turns on a transformer primary if the secondary voltage required is 120 V at 60 Hz ?"
+TXT="A distribution transformer is rated at 18 kVA , 20,000/480 V , and 60 hz. can this transformer safely supply 15kVA to a 415-V load at 50hz? Why or not?"
 print('\nINPUT:\n' + TXT)
 print('\nOUTPUT:\n' + word_patterns_replace(TXT))
 
