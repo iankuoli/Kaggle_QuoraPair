@@ -7,6 +7,8 @@ from tqdm import tqdm
 from scipy.stats import skew, kurtosis
 from scipy.spatial.distance import cosine, cityblock, canberra, minkowski, braycurtis
 from nltk import word_tokenize
+from nltk.tokenize import RegexpTokenizer
+from nltk.stem.porter import PorterStemmer
 
 
 # Set parameters
@@ -112,11 +114,10 @@ def calculate_tfidf(qs):
     vectorizer.fit_transform(qs)
     idf = vectorizer.idf_
     dict_tfidf = dict(zip(vectorizer.get_feature_names(), idf))
-
-    print('\nMost common words and weights:')
-    print(sorted(dict_tfidf.items(), key=lambda x: x[1] if x[1] > 0 else 9999)[:10])
-    print('\nLeast common words and weights: ')
-    print(sorted(dict_tfidf.items(), key=lambda x: x[1], reverse=True)[:10])
+    # print('\nMost common words and weights:')
+    # print(sorted(dict_tfidf.items(), key=lambda x: x[1] if x[1] > 0 else 9999)[:10])
+    # print('\nLeast common words and weights: ')
+    # print(sorted(dict_tfidf.items(), key=lambda x: x[1], reverse=True)[:10])
     # print(dict_tfidf.get('how', 0))
     return dict_tfidf
 
@@ -273,8 +274,52 @@ def sent2vec(s):
     return v / np.sqrt((v ** 2).sum())
 
 
+def clean_doc(s):
+    # clean and tokenize document string
+    raw = s.lower()
+    tokenizer = RegexpTokenizer(r'\w+')
+    tokens = tokenizer.tokenize(raw)
+
+    # remove stop words from tokens
+    stopped_tokens = [i for i in tokens if i not in stop_words]
+
+    # Create p_stemmer of class PorterStemmer
+    p_stemmer = PorterStemmer()
+    # stem tokens
+    stemmed_tokens = [p_stemmer.stem(i) for i in stopped_tokens]
+    return stemmed_tokens
+
+
+def train_lda(texts, num_topics=20):
+    dictionary = gensim.corpora.Dictionary(texts)
+    # convert tokenized documents into a document-term matrix
+    corpus = [dictionary.doc2bow(text) for text in texts]
+    del texts
+    lda = gensim.models.ldamodel.LdaModel(corpus, num_topics=num_topics, id2word=dictionary, passes=20)
+    lsi = gensim.models.lsimodel.LsiModel(corpus, num_topics=num_topics, id2word=dictionary)
+    return dictionary, lda, lsi
+
+
 def char_ngrams(n, word):
     return [word[i:i + n] for i in range(len(word)-n+1)]
+
+
+def prepare_df(path):
+    df = pd.read_csv(path)
+    df = df.fillna(' ')
+
+    # 斷詞(中文的話這段要另外做斷詞)
+    df['q1_split'] = df['question1'].map(lambda x: str(x).lower().split())
+    df['q2_split'] = df['question2'].map(lambda x: str(x).lower().split())
+    return df
+
+
+def load_glove(path):
+    model = gensim.models.KeyedVectors.load_word2vec_format(path, binary=True)
+
+    norm_model = gensim.models.KeyedVectors.load_word2vec_format(path, binary=True)
+    norm_model.init_sims(replace=True)
+    return model, norm_model
 
 
 def build_features(data, stops):
@@ -389,7 +434,27 @@ def build_features(data, stops):
     X['skew_q1vec'] = [skew(x) for x in np.nan_to_num(question1_vectors)]
     X['skew_q2vec'] = [skew(x) for x in np.nan_to_num(question2_vectors)]
     X['kur_q1vec'] = [kurtosis(x) for x in np.nan_to_num(question1_vectors)]
-    X['kur_q2vec'] = [kurtosis(x) for x in np.nan_to_num(question2_vectors)]
+    X['kur_q2vec'] = [kurtosis(x) for x in np.nan_to_num(question2_vectors)]  # 79
+
+    # LDA features
+    topics_q1 = data.question1.apply(lambda x: dict(lda_model[dictionary.doc2bow(clean_doc(x))]))
+    for idx in range(num_topics):
+        X['lda_topic_%s_%s' % (idx, 'q1')] = topics_q1.apply(lambda x: x.get(idx, 0))
+    del topics_q1
+    topics_q2 = data.question2.apply(lambda x: dict(lda_model[dictionary.doc2bow(clean_doc(x))]))
+    for idx in range(num_topics):
+        X['lda_topic_%s_%s' % (idx, 'q2')] = topics_q2.apply(lambda x: x.get(idx, 0))
+    del topics_q2
+
+    # LSI features
+    topics_q1 = data.question1.apply(lambda x: dict(lsi_model[dictionary.doc2bow(clean_doc(x))]))
+    for idx in range(num_topics):
+        X['lsi_topic_%s_%s' % (idx, 'q1')] = topics_q1.apply(lambda x: x.get(idx, 0))
+    del topics_q1
+    topics_q2 = data.question2.apply(lambda x: dict(lsi_model[dictionary.doc2bow(clean_doc(x))]))
+    for idx in range(num_topics):
+        X['lsi_topic_%s_%s' % (idx, 'q2')] = topics_q2.apply(lambda x: x.get(idx, 0))
+    del topics_q2
 
     return X
 
@@ -398,23 +463,24 @@ if __name__ == '__main__':
     data_path = '/data1/quora_pair/50q_pair.csv'
     glove_path = '/data1/resources/GoogleNews-vectors-negative300.bin'
     out_path = '/data1/resources/quora_features.csv'
-
-    df = pd.read_csv(data_path)
-    df = df.fillna(' ')
-
-    # 斷詞(中文的話這段要另外做斷詞)
-    df['q1_split'] = df['question1'].map(lambda x: str(x).lower().split())
-    df['q2_split'] = df['question2'].map(lambda x: str(x).lower().split())
-
+    num_topics = 20
     print('stop words:', stop_words)
 
+    # read data frame and build split feature for instance '1 2 3' to ['1', '2', '3']
+    df = prepare_df(data_path)
+
     # Load glove model
-    model = gensim.models.KeyedVectors.load_word2vec_format(glove_path, binary=True)
-    norm_model = gensim.models.KeyedVectors.load_word2vec_format(glove_path, binary=True)
-    norm_model.init_sims(replace=True)
+    model, norm_model = load_glove(glove_path)
+    # model, norm_model = None, None
+
+    # Build LDA model
+    texts = [i for i in pd.Series(df['question1'].tolist() + df['question2'].tolist()).apply(clean_doc)]
+    dictionary, lda_model, lsi_model = train_lda(texts, num_topics=num_topics)
+    del texts
 
     # Build features
     df_new_feature = build_features(df, stop_words)
 
     # Save feature data to csv
+    print('save csv in %s' % out_path)
     df_new_feature.to_csv(out_path, index=False)
