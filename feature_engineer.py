@@ -9,12 +9,24 @@ from scipy.spatial.distance import cosine, cityblock, canberra, minkowski, brayc
 from nltk import word_tokenize
 from nltk.tokenize import RegexpTokenizer
 from nltk.stem.porter import PorterStemmer
-
+import logging
+import sys
 
 # Set parameters
 stop_words = set(stopwords.words('english'))
 common_start = ['why', 'what', 'how', "what's", 'do', 'does', 'is',
                 'can', 'which', 'if', 'i', 'are', 'where', 'who']
+
+
+def set_logger(log_level=logging.INFO):
+    """Configure the logger with log_level."""
+    logging.basicConfig(
+        format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+        level=log_level,
+        stream=sys.stderr)
+    logger = logging.getLogger(__name__)
+    # logging.getLogger('requests').setLevel(logging.WARNING)
+    return logger
 
 
 def word_len(s):
@@ -114,11 +126,11 @@ def calculate_tfidf(qs):
     vectorizer.fit_transform(qs)
     idf = vectorizer.idf_
     dict_tfidf = dict(zip(vectorizer.get_feature_names(), idf))
-    # print('\nMost common words and weights:')
-    # print(sorted(dict_tfidf.items(), key=lambda x: x[1] if x[1] > 0 else 9999)[:10])
-    # print('\nLeast common words and weights: ')
-    # print(sorted(dict_tfidf.items(), key=lambda x: x[1], reverse=True)[:10])
-    # print(dict_tfidf.get('how', 0))
+    # log.info('\nMost common words and weights:')
+    # log.info(sorted(dict_tfidf.items(), key=lambda x: x[1] if x[1] > 0 else 9999)[:10])
+    # log.info('\nLeast common words and weights: ')
+    # log.info(sorted(dict_tfidf.items(), key=lambda x: x[1], reverse=True)[:10])
+    # log.info(dict_tfidf.get('how', 0))
     return dict_tfidf
 
 
@@ -325,23 +337,26 @@ def load_glove(path):
 def build_features(data, stops):
     X = pd.DataFrame()
 
+    log.info('Calculate tfidf')
     qs = pd.Series(data['question1'].tolist() + data['question2'].tolist())
+    st = time.time()
     weights = calculate_tfidf(qs)
+    log.info('...time for cal tfidf: %.2f m' % ((time.time()-st) / 60))
     del qs
 
-    print('Building features')
+    log.info('Building features')
     X['len_q1'] = data.question1.apply(word_len)   # 1:Length of Q1 str
     X['len_q2'] = data.question2.apply(word_len)   # 2:Length of Q2 str
     X['len_diff'] = abs(X.len_q1 - X.len_q2)   # 3:Length difference between Q1 and Q2
 
-    print('Building char features')
+    log.info('Building char features')
     X['len_char_q1'] = data.q1_split.apply(word_len_char)  # 4:Char length of Q1
     X['len_char_q2'] = data.q2_split.apply(word_len_char)  # 5:Char length of Q2
     X['len_char_diff'] = data.apply(len_char_diff, axis=1, raw=True)  # 6:Char length difference between Q1 and Q2
     X['char_diff_unq_stop'] = data.apply(char_diff_unique_stop, stops=stops, axis=1, raw=True)  # 7: set(6)
     X['char_ratio'] = data.apply(char_ratio, axis=1, raw=True)  # 8:Char length Q1 / char length Q2
 
-    print('Building word count features')
+    log.info('Building word count features')
     X['word_count_q1'] = data.q1_split.apply(word_count)  # 9:Word count of Q1
     X['word_count_q2'] = data.q2_split.apply(word_count)  # 10:Word count of Q2
     X['word_count_diff'] = data.apply(wc_diff, axis=1, raw=True)  # 11:Word count difference between  Q1 and Q2
@@ -355,7 +370,7 @@ def build_features(data, stops):
     X['wc_diff_unique_stop'] = data.apply(wc_diff_unique_stop, stops=stops, axis=1, raw=True)  # 17: 14 - stop words
     X['wc_ratio_unique_stop'] = data.apply(wc_ratio_unique_stop, stops=stops, axis=1, raw=True)  # 18: 15 - stop words
 
-    print('Building mark features')
+    log.info('Building mark features')
     X['same_start'] = data.apply(same_start_word, axis=1, raw=True)  # 19 same start = 1 else = 0
     X['same_end'] = data.apply(same_end_word, axis=1, raw=True)  # 20 same end = 1 else = 0
 
@@ -367,7 +382,7 @@ def build_features(data, stops):
     X['num_ques_mark_q2'] = data.question2.apply(num_ques_mark)  # 25
     X['num_ques_mark_diff'] = abs(X.num_ques_mark_q1 - X.num_ques_mark_q2)  # 26
 
-    print('Building another features')
+    log.info('Building another features')
     # 27 ~ 27+28(14*2)-1=54: First word in sentence(one hot)
     for start in common_start:
         X['start_%s_%s' % (start, 'q1')] = data.q1_split.apply(start_with, args=(start,))
@@ -385,7 +400,7 @@ def build_features(data, stops):
     X['tfidf_wm_stops'] = data.apply(tfidf_word_match_share_stops, stops=stops, weights=weights,
                                      axis=1, raw=True)  # 60:字的重複比例 without stop word between Q1 and Q2 (TF-IDF值)
 
-    print('Building fuzzy features')
+    log.info('Building fuzzy features')
     # 61~67:Build fuzzy features
     X['fuzz_qratio'] = data.apply(lambda x: fuzz.QRatio(str(x['question1']), str(x['question2'])), axis=1)
     X['fuzz_WRatio'] = data.apply(lambda x: fuzz.WRatio(str(x['question1']), str(x['question2'])), axis=1)
@@ -402,14 +417,14 @@ def build_features(data, stops):
 
     X['jaccard'] = data.apply(jaccard, axis=1, raw=True)  # 68:jaccard distance
 
-    print('Build word2vec/glove distance features')
+    log.info('Build word2vec/glove distance features')
     # Build word2vec/glove distance features
     X['wmd'] = data.apply(lambda x: wmd(x['q1_split'], x['q2_split']), axis=1)  # 69
     X['norm_wmd'] = data.apply(lambda x: norm_wmd(x['q1_split'], x['q2_split']), axis=1)  # 70
 
     question1_vectors = np.zeros((data.shape[0], 300))
 
-    print('Sent2Vec')
+    log.info('Sent2Vec')
     # Sent2Vec
     for i, q in tqdm(enumerate(data.question1.values)):
         question1_vectors[i, :] = sent2vec(q)
@@ -418,7 +433,7 @@ def build_features(data, stops):
     for i, q in tqdm(enumerate(data.question2.values)):
         question2_vectors[i, :] = sent2vec(q)
 
-    print('Building distance features')
+    log.info('Building distance features')
     # Build distance features
     X['cosine_distance'] = [cosine(x, y) for (x, y) in zip(np.nan_to_num(question1_vectors),
                                                            np.nan_to_num(question2_vectors))]
@@ -460,27 +475,77 @@ def build_features(data, stops):
 
 
 if __name__ == '__main__':
-    data_path = '/data1/quora_pair/50q_pair.csv'
-    glove_path = '/data1/resources/GoogleNews-vectors-negative300.bin'
-    out_path = '/data1/resources/quora_features.csv'
-    num_topics = 20
-    print('stop words:', stop_words)
+    # test = True
+    test = False
+    log = set_logger()
+    if test:
+        data_path = '/data1/quora_pair/50q_pair.csv'
+        data_path_test = '/data1/quora_pair/50q_pair.csv'
+        w2v_path = '/data1/resources/GoogleNews-vectors-negative300.bin'
+        out_path = '/data1/resources/train_features.csv'
+        out_path_test = '/data1/resources/test_features.csv'
+        num_topics = 20
+    else:
+        data_path = '/home/csist/Dataset/QuoraQP/train_clean.csv'
+        data_path_test = '/home/csist/Dataset/QuoraQP/test_clean.csv'
+        w2v_path = '/home/csist/workspace/resources/GoogleNews-vectors-negative300.bin'
+        out_path = 'added_features/train_features.csv'
+        out_path_test = 'added_features/test_features.csv'
+        num_topics = 100
+    log.info('stop words: {0}'.format(stop_words))
 
+    import time
+    log.info('Reading data frame')
+    st = time.time()
     # read data frame and build split feature for instance '1 2 3' to ['1', '2', '3']
     df = prepare_df(data_path)
+    log.info('...time for read data frame: %.2f s' % (time.time()-st))
 
     # Load glove model
-    model, norm_model = load_glove(glove_path)
+    log.info('Loading w2v')
+    st = time.time()
+    model, norm_model = load_glove(w2v_path)
     # model, norm_model = None, None
+    log.info('...time for load w2v: %.2f m' % ((time.time()-st) / 60))
 
     # Build LDA model
+    log.info('Building LDA and LSI model')
+    log.warning('**************** dictionary should be build by all data... ********************')
+    st = time.time()
     texts = [i for i in pd.Series(df['question1'].tolist() + df['question2'].tolist()).apply(clean_doc)]
     dictionary, lda_model, lsi_model = train_lda(texts, num_topics=num_topics)
     del texts
+    log.info('...time for train lda and lsi: %.2f m' % ((time.time()-st) / 60))
 
     # Build features
+    log.info('Building features')
+    st = time.time()
     df_new_feature = build_features(df, stop_words)
+    log.info('...time for build features: %.2f m' % ((time.time()-st) / 60))
+    del df
 
     # Save feature data to csv
-    print('save csv in %s' % out_path)
+    log.info('save csv in %s' % out_path)
+    st = time.time()
     df_new_feature.to_csv(out_path, index=False)
+    log.info('...time for save csv: %.2f m' % ((time.time()-st) / 60))
+    del df_new_feature
+
+    log.info('Reading test data frame')
+    st = time.time()
+    # read data frame and build split feature for instance '1 2 3' to ['1', '2', '3']
+    df = prepare_df(data_path_test)
+    log.info('...time for read test data: %.2f s' % (time.time()-st))
+
+    # Build test features
+    log.info('Building test features')
+    st = time.time()
+    df_new_feature_test = build_features(df, stop_words)
+    log.info('...time for build features: %.2f m' % ((time.time()-st) / 60))
+    del df
+
+    # Save test feature data to csv
+    log.info('test feature save csv in %s' % out_path)
+    st = time.time()
+    df_new_feature_test.to_csv(out_path_test, index=False)
+    log.info('...time for save csv: %.2f m' % ((time.time()-st) / 60))
